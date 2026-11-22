@@ -1,0 +1,24 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+*.lock
+
+# Android
+android/app/google-services.json
+android/.gradle
+android/captures/
+android/gradlew
+android/gradlew.bat
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+
+# IDE
+.idea/
+.vscode/
+*.iml
