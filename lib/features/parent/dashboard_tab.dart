@@ -87,6 +87,9 @@ class DashboardTab extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
+          // Quick Praise High-Five Card for Parents
+          _ParentPraiseQuickCard(familyCode: familyCode),
+          const SizedBox(height: 16),
           // Weekly progress
           weekAsync.when(
             loading: () => const Card(child: Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator())),
@@ -98,10 +101,7 @@ class DashboardTab extends ConsumerWidget {
           activeAndTodayAsync.when(
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
-            data: (hw) => _TodayIndividualHomeworksCard(
-              homeworks: hw,
-              familyCode: familyCode,
-            ),
+            data: (hw) => _TodayIndividualHomeworksCard(homeworks: hw),
           ),
           const SizedBox(height: 16),
           // Urgent (includes all active overdue and today's due homeworks)
@@ -274,50 +274,50 @@ class _RecentChangesCard extends StatelessWidget {
   }
 }
 
-class _TodayIndividualHomeworksCard extends ConsumerWidget {
-  final List<Homework> homeworks;
+class _ParentPraiseQuickCard extends ConsumerWidget {
   final String familyCode;
-  const _TodayIndividualHomeworksCard({required this.homeworks, required this.familyCode});
+  const _ParentPraiseQuickCard({required this.familyCode});
 
-  void _sendPraiseDialog(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF9E6), // Soft warm pastel yellow
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFECB3), width: 1.2),
       ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
             children: [
-              const Row(
-                children: [
-                  Text('👏', style: TextStyle(fontSize: 24)),
-                  SizedBox(width: 8),
-                  Text('이현이에게 칭찬 하이파이브 보내기',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ],
+              Text('👏', style: TextStyle(fontSize: 22)),
+              SizedBox(width: 8),
+              Text(
+                '이현이에게 칭찬 하이파이브 보내기',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF5D4037),
+                ),
               ),
-              const SizedBox(height: 8),
-              const Text('아이의 앱 화면에 축하 팡파레와 칭찬 팝업이 즉시 표시됩니다.',
-                  style: TextStyle(color: Colors.grey, fontSize: 13)),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ('👏', '참 잘했어! 최고야!'),
-                  ('❤️', '엄마 아빠가 항상 응원해!'),
-                  ('🌟', '오늘 집중력 대단해!'),
-                  ('🍦', '숙제 끝! 맛있는 간식 먹자!'),
-                  ('🎮', '약속대로 자유시간 즐겨!'),
-                ].map((p) => ActionChip(
-                  avatar: Text(p.$1),
-                  label: Text(p.$2),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ('👏', '참 잘했어!'),
+                ('❤️', '최고야!'),
+                ('🌟', '대단해!'),
+                ('🍦', '간식타임!'),
+                ('🎮', '자유시간!'),
+              ].map((p) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilledButton.tonal(
                   onPressed: () async {
-                    Navigator.pop(ctx);
                     final role = LocalPrefsService.role?.name ?? 'dad';
                     final senderName = role == 'mom' ? '엄마' : '아빠';
                     await ref.read(streakRepositoryProvider).sendPraise(
@@ -333,18 +333,37 @@ class _TodayIndividualHomeworksCard extends ConsumerWidget {
                       );
                     }
                   },
-                )).toList(),
-              ),
-              const SizedBox(height: 12),
-            ],
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF5D4037),
+                    elevation: 0,
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(p.$1),
+                      const SizedBox(width: 4),
+                      Text(p.$2, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              )).toList(),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
+}
+
+class _TodayIndividualHomeworksCard extends StatelessWidget {
+  final List<Homework> homeworks;
+  const _TodayIndividualHomeworksCard({required this.homeworks});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final active = homeworks.where((h) => h.status != 'none').toList();
     return Card(
       child: Padding(
@@ -354,21 +373,11 @@ class _TodayIndividualHomeworksCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.checklist_rtl_rounded, color: Colors.blueAccent),
+                const Icon(Icons.checklist_rtl_rounded, color: Colors.blueAccent, size: 22),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '오늘의 숙제 현황 (${active.length}건)',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                FilledButton.tonal(
-                  onPressed: () => _sendPraiseDialog(context, ref),
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                  ),
-                  child: const Text('칭찬 보내기 👏', style: TextStyle(fontSize: 12)),
+                Text(
+                  '오늘의 숙제 현황 (${active.length}건)',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
