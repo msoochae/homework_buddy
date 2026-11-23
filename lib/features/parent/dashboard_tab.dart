@@ -32,7 +32,20 @@ class DashboardTab extends ConsumerWidget {
 
     return CustomScrollView(slivers: [
       SliverAppBar(
-        title: const Text('부모 대시보드 👨‍👩‍👧'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('부모 대시보드 👨‍👩‍👧', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              familyCode.isNotEmpty ? '가족코드: $familyCode' : '가족코드 연결 필요',
+              style: TextStyle(
+                fontSize: 11,
+                color: familyCode.isNotEmpty ? Colors.black54 : Colors.red,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
         floating: true,
         actions: [
           IconButton(

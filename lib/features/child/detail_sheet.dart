@@ -129,25 +129,37 @@ class _DetailSheetState extends ConsumerState<DetailSheet> {
     final dDay = hw.dDay;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.6,
+      initialChildSize: 0.65,
       maxChildSize: 0.9,
       minChildSize: 0.4,
       expand: false,
-      builder: (ctx, scroll) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+      builder: (ctx, scroll) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+              offset: Offset(0, -3),
             ),
-            Expanded(
-              child: ListView(
-                controller: scroll,
-                padding: const EdgeInsets.all(16),
-                children: [
+          ],
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+              Expanded(
+                child: ListView(
+                  controller: scroll,
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  children: [
                   Row(
                     children: [
                       Text(cat.emoji, style: const TextStyle(fontSize: 32)),
@@ -307,6 +319,7 @@ class _DetailSheetState extends ConsumerState<DetailSheet> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }

@@ -17,12 +17,19 @@ class ChatMessage {
 
   factory ChatMessage.fromFirestore(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>? ?? {};
+    final ts = d['createdAt'];
+    DateTime created;
+    if (ts is Timestamp) {
+      created = ts.toDate();
+    } else {
+      created = DateTime.now();
+    }
     return ChatMessage(
       id: doc.id,
       senderRole: d['senderRole'] as String? ?? 'child',
       senderName: d['senderName'] as String? ?? '가족',
       text: d['text'] as String? ?? '',
-      createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: created,
     );
   }
 

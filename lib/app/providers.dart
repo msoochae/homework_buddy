@@ -12,7 +12,7 @@ import '../data/repositories/chat_repository.dart';
 import '../data/repositories/streak_repository.dart';
 import '../services/local_prefs_service.dart';
 
-final familyCodeProvider = Provider<String>((ref) {
+final familyCodeProvider = StateProvider<String>((ref) {
   return LocalPrefsService.familyCode ?? '';
 });
 

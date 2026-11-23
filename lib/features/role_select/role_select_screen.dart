@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app/providers.dart';
 import '../../core/constants.dart';
 import '../../data/repositories/family_repository.dart';
 import '../../services/fcm_service.dart';
@@ -41,26 +42,30 @@ class _RoleSelectScreenState extends ConsumerState<RoleSelectScreen> {
       return;
     }
 
-    Future(() async {
-      try {
+    final code = LocalPrefsService.familyCode!;
+    ref.read(familyCodeProvider.notifier).state = code;
+
+    try {
+      if (FirebaseAuth.instance.currentUser == null) {
         await FirebaseAuth.instance.signInAnonymously().timeout(const Duration(seconds: 4));
-      } catch (e) {
-        debugPrint('Firebase Auth background error: $e');
       }
-      try {
-        final token = await FcmService.getToken();
-        if (token != null) {
-          await FamilyRepository().saveDevice(
-            LocalPrefsService.familyCode!,
-            LocalPrefsService.deviceId,
-            role.name,
-            token,
-          ).timeout(const Duration(seconds: 4));
-        }
-      } catch (e) {
-        debugPrint('Device token save background error: $e');
+    } catch (e) {
+      debugPrint('Firebase Auth error: $e');
+    }
+
+    try {
+      final token = await FcmService.getToken();
+      if (token != null) {
+        await FamilyRepository().saveDevice(
+          code,
+          LocalPrefsService.deviceId,
+          role.name,
+          token,
+        ).timeout(const Duration(seconds: 4));
       }
-    });
+    } catch (e) {
+      debugPrint('Device token save error: $e');
+    }
 
     if (mounted) {
       Navigator.of(context).pushReplacementNamed(

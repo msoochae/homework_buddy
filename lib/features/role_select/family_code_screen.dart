@@ -1,43 +1,45 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app/providers.dart';
 import '../../core/constants.dart';
 import '../../data/repositories/family_repository.dart';
 import '../../services/fcm_service.dart';
 import '../../services/local_prefs_service.dart';
 
-class FamilyCodeScreen extends StatefulWidget {
+class FamilyCodeScreen extends ConsumerStatefulWidget {
   const FamilyCodeScreen({super.key});
 
   @override
-  State<FamilyCodeScreen> createState() => _FamilyCodeScreenState();
+  ConsumerState<FamilyCodeScreen> createState() => _FamilyCodeScreenState();
 }
 
-class _FamilyCodeScreenState extends State<FamilyCodeScreen> {
+class _FamilyCodeScreenState extends ConsumerState<FamilyCodeScreen> {
   final _controller = TextEditingController();
   bool _loading = false;
   String? _error;
 
-  void _syncDeviceInBackground(String code, UserRole role) {
-    Future(() async {
-      try {
+  Future<void> _syncDevice(String code, UserRole role) async {
+    try {
+      if (FirebaseAuth.instance.currentUser == null) {
         await FirebaseAuth.instance
             .signInAnonymously()
             .timeout(const Duration(seconds: 4));
-      } catch (e) {
-        debugPrint('Firebase Auth background error: $e');
       }
+    } catch (e) {
+      debugPrint('Firebase Auth error: $e');
+    }
 
-      try {
-        final token = await FcmService.getToken();
-        if (token != null) {
-          await FamilyRepository()
-              .saveDevice(code, LocalPrefsService.deviceId, role.name, token)
-              .timeout(const Duration(seconds: 4));
-        }
-      } catch (e) {
-        debugPrint('Device token save background error: $e');
+    try {
+      final token = await FcmService.getToken();
+      if (token != null) {
+        await FamilyRepository()
+            .saveDevice(code, LocalPrefsService.deviceId, role.name, token)
+            .timeout(const Duration(seconds: 4));
       }
-    });
+    } catch (e) {
+      debugPrint('Device token save error: $e');
+    }
   }
 
   Future<void> _join() async {
@@ -53,9 +55,10 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen> {
 
     try {
       await LocalPrefsService.setFamilyCode(code);
+      ref.read(familyCodeProvider.notifier).state = code;
       final role = LocalPrefsService.role ?? UserRole.child;
 
-      _syncDeviceInBackground(code, role);
+      await _syncDevice(code, role);
 
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(role.isParent ? '/parent' : '/child');
@@ -72,9 +75,10 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen> {
     try {
       final code = FamilyRepository.generateFamilyCode();
       await LocalPrefsService.setFamilyCode(code);
+      ref.read(familyCodeProvider.notifier).state = code;
       final role = LocalPrefsService.role ?? UserRole.child;
 
-      _syncDeviceInBackground(code, role);
+      await _syncDevice(code, role);
 
       if (mounted) {
         setState(() => _loading = false);

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -23,6 +24,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     _initialLoadTime = DateTime.now();
+    _ensureAuthAndCode();
+  }
+
+  void _ensureAuthAndCode() {
+    final code = LocalPrefsService.familyCode;
+    if (code != null && code.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(familyCodeProvider).isEmpty) {
+          ref.read(familyCodeProvider.notifier).state = code;
+        }
+      });
+    }
+    if (FirebaseAuth.instance.currentUser == null) {
+      FirebaseAuth.instance.signInAnonymously().then((_) {
+        if (mounted) {
+          ref.invalidate(chatMessagesProvider);
+        }
+      }).catchError((e) {
+        debugPrint('Chat auto auth error: $e');
+      });
+    }
   }
 
   @override
@@ -61,6 +83,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _sendMessage(String familyCode) async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
+
+    final resolvedCode = familyCode.isNotEmpty ? familyCode : (LocalPrefsService.familyCode ?? '');
+    if (resolvedCode.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('가족 코드가 설정되지 않았습니다. 역할을 다시 선택하거나 설정해 주세요.')),
+        );
+      }
+      return;
+    }
+
     _textController.clear();
 
     final myRole = LocalPrefsService.role?.name ?? 'child';
@@ -75,7 +108,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
 
     try {
-      await ref.read(chatRepositoryProvider).sendMessage(familyCode, msg);
+      await ref.read(chatRepositoryProvider).sendMessage(resolvedCode, msg);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -117,7 +150,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F9), // Modern soft warm canvas
       appBar: AppBar(
-        title: const Text('가족 채팅 💬'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('가족 채팅 💬', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              familyCode.isNotEmpty ? '가족코드: $familyCode' : '가족코드 연결 필요',
+              style: TextStyle(
+                fontSize: 11,
+                color: familyCode.isNotEmpty ? Colors.black54 : Colors.red,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
       body: SafeArea(
         child: Column(
@@ -256,7 +302,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('채팅 로딩 실패: $e')),
+                error: (e, _) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.black38),
+                        const SizedBox(height: 12),
+                        const Text(
+                          '채팅을 불러오지 못했습니다.',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$e',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.tonalIcon(
+                          onPressed: () {
+                            _ensureAuthAndCode();
+                            ref.invalidate(chatMessagesProvider);
+                          },
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('다시 시도'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
             Container(

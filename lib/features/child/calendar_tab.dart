@@ -140,6 +140,7 @@ class _CalendarTabState extends ConsumerState<CalendarTab> {
         onTap: () => showModalBottomSheet(
           context: ctx,
           isScrollControlled: true,
+          backgroundColor: Colors.transparent,
           builder: (_) => DetailSheet(homework: homeworks[i]),
         ),
       ),

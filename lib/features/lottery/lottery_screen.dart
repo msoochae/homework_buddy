@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
@@ -31,6 +32,29 @@ class _LotteryScreenState extends ConsumerState<LotteryScreen>
       TweenSequenceItem(tween: Tween(begin: -0.1, end: 0.1), weight: 2),
       TweenSequenceItem(tween: Tween(begin: 0.1, end: 0.0), weight: 1),
     ]).animate(CurvedAnimation(parent: _animController, curve: Curves.easeInOut));
+
+    _ensureAuthAndCode();
+  }
+
+  void _ensureAuthAndCode() {
+    final code = LocalPrefsService.familyCode;
+    if (code != null && code.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(familyCodeProvider).isEmpty) {
+          ref.read(familyCodeProvider.notifier).state = code;
+        }
+      });
+    }
+    if (FirebaseAuth.instance.currentUser == null) {
+      FirebaseAuth.instance.signInAnonymously().then((_) {
+        if (mounted) {
+          ref.invalidate(lotteryTicketsProvider);
+          ref.invalidate(lotteryInventoryProvider);
+        }
+      }).catchError((e) {
+        debugPrint('Lottery auto auth error: $e');
+      });
+    }
   }
 
   @override
@@ -177,6 +201,85 @@ class _LotteryScreenState extends ConsumerState<LotteryScreen>
     );
   }
 
+  Color _getRankColor(int rank) {
+    switch (rank) {
+      case 1: return const Color(0xFFE67E22);
+      case 2: return const Color(0xFF8E44AD);
+      case 3: return const Color(0xFF2980B9);
+      case 4: return const Color(0xFF27AE60);
+      case 5: return const Color(0xFFD35400);
+      case 6: return const Color(0xFFE91E63);
+      case 7: return const Color(0xFF5B5FEF);
+      default: return Colors.indigo;
+    }
+  }
+
+  Color _getRankBgColor(int rank) {
+    switch (rank) {
+      case 1: return const Color(0xFFFEF9E7);
+      case 2: return const Color(0xFFF4ECF7);
+      case 3: return const Color(0xFFEBF5FB);
+      case 4: return const Color(0xFFE8F8F5);
+      case 5: return const Color(0xFFFBEEE6);
+      case 6: return const Color(0xFFFCE4EC);
+      case 7: return const Color(0xFFEEF2FF);
+      default: return const Color(0xFFF5F5F5);
+    }
+  }
+
+  Future<void> _useItem(LotteryInventoryItem item, String familyCode, bool isParent) async {
+    final actionText = isParent ? '사용 완료 처리' : '사용하기';
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isParent ? '보상 사용 완료 처리' : '보상 사용'),
+        content: Text(
+          isParent
+              ? '아이가 \'${item.reward}\'을(를) 사용했나요?\n확인을 누르면 보관함에서 삭제됩니다.'
+              : '\'${item.reward}\'을(를) 사용하시겠습니까?\n사용하면 보관함에서 삭제됩니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(actionText),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final resolvedCode = familyCode.isNotEmpty ? familyCode : (LocalPrefsService.familyCode ?? '');
+    if (resolvedCode.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('가족 코드가 설정되지 않았습니다.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      await ref.read(lotteryRepositoryProvider).useItem(resolvedCode, item.id);
+      ref.invalidate(lotteryInventoryProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('\'${item.reward}\' 사용이 완료되었습니다! ✨')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('사용 처리 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final familyCode = ref.watch(familyCodeProvider);
@@ -189,7 +292,20 @@ class _LotteryScreenState extends ConsumerState<LotteryScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('행운의 뽑기 🎰'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('행운의 뽑기 🎰', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              familyCode.isNotEmpty ? '가족코드: $familyCode' : '가족코드 연결 필요',
+              style: TextStyle(
+                fontSize: 11,
+                color: familyCode.isNotEmpty ? Colors.black54 : Colors.red,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
         actions: [
           if (isParent)
             Padding(
@@ -249,9 +365,9 @@ class _LotteryScreenState extends ConsumerState<LotteryScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '보유 뽑기권',
-                          style: TextStyle(
+                        Text(
+                          isParent ? '아이 보유 뽑기권' : '보유 뽑기권',
+                          style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -297,63 +413,65 @@ class _LotteryScreenState extends ConsumerState<LotteryScreen>
               ),
             ),
 
-            const SizedBox(height: 24),
+            if (!isParent) ...[
+              const SizedBox(height: 24),
 
-            // Dynamic Box Shake Area
-            GestureDetector(
-              onTap: _isDrawing ? null : () => _startDraw(tickets, familyCode),
-              child: AnimatedBuilder(
-                animation: _shakeAnimation,
-                builder: (context, child) {
-                  return Transform.rotate(
-                    angle: _isDrawing ? _shakeAnimation.value : 0.0,
-                    child: child,
-                  );
-                },
-                child: Container(
-                  height: 180,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    border: Border.all(color: Colors.amber.shade300, width: 2),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.amber.withOpacity(0.2),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _isDrawing ? '🎲' : '🎁',
-                        style: const TextStyle(fontSize: 70),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _isDrawing ? '두근두근... 뽑는 중!' : '터치해서 행운의 뽑기 시작!',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: _isDrawing ? Colors.deepOrange : Colors.brown.shade800,
+              // Dynamic Box Shake Area (아이 전용)
+              GestureDetector(
+                onTap: _isDrawing ? null : () => _startDraw(tickets, familyCode),
+                child: AnimatedBuilder(
+                  animation: _shakeAnimation,
+                  builder: (context, child) {
+                    return Transform.rotate(
+                      angle: _isDrawing ? _shakeAnimation.value : 0.0,
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    height: 180,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      border: Border.all(color: Colors.amber.shade300, width: 2),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.amber.withOpacity(0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
                         ),
-                      ),
-                      if (!_isDrawing)
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         Text(
-                          tickets > 0 ? '뽑기권 1장 소모' : '뽑기권이 필요해요',
+                          _isDrawing ? '🎲' : '🎁',
+                          style: const TextStyle(fontSize: 70),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _isDrawing ? '두근두근... 뽑는 중!' : '터치해서 행운의 뽑기 시작!',
                           style: TextStyle(
-                            fontSize: 13,
-                            color: tickets > 0 ? Colors.brown.shade400 : Colors.red,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _isDrawing ? Colors.deepOrange : Colors.brown.shade800,
                           ),
                         ),
-                    ],
+                        if (!_isDrawing)
+                          Text(
+                            tickets > 0 ? '뽑기권 1장 소모' : '뽑기권이 필요해요',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: tickets > 0 ? Colors.brown.shade400 : Colors.red,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
 
             const SizedBox(height: 24),
 
@@ -458,58 +576,98 @@ class _LotteryScreenState extends ConsumerState<LotteryScreen>
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: inventory.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (context, idx) {
                   final item = inventory[idx];
-                  return Card(
-                    elevation: 1,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.amber.shade100,
-                        child: Text(item.emoji, style: const TextStyle(fontSize: 20)),
-                      ),
-                      title: Text(
-                        '${item.rank}등: ${item.reward}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        '${item.wonAt.month}월 ${item.wonAt.day}일 획득',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                      trailing: FilledButton.tonal(
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('보상 사용'),
-                              content: Text('\'${item.reward}\'을(를) 사용하시겠습니까?\n사용하면 보관함에서 삭제됩니다.'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, false),
-                                  child: const Text('취소'),
-                                ),
-                                FilledButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  child: const Text('사용'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            await ref.read(lotteryRepositoryProvider).useItem(familyCode, item.id);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('\'${item.reward}\'을(를) 사용했습니다! ✨')),
-                              );
-                            }
-                          }
-                        },
-                        style: FilledButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
+                  final rankColor = _getRankColor(item.rank);
+                  final rankBgColor = _getRankBgColor(item.rank);
+
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: rankColor.withOpacity(0.35), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: rankColor.withOpacity(0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
                         ),
-                        child: const Text('사용'),
-                      ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Top Header: Rank Tag + Won Date
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: rankBgColor,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: rankColor.withOpacity(0.4), width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(item.emoji, style: const TextStyle(fontSize: 14)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${item.rank}등 당첨',
+                                    style: TextStyle(
+                                      color: rankColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${item.wonAt.month}월 ${item.wonAt.day}일 획득',
+                              style: const TextStyle(fontSize: 12, color: Colors.black45),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        // Bottom Content: Full Title + Use Button
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.reward,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF191F28),
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            FilledButton.tonal(
+                              onPressed: () => _useItem(item, familyCode, isParent),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: rankColor.withOpacity(0.12),
+                                foregroundColor: rankColor,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                visualDensity: VisualDensity.compact,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: Text(
+                                isParent ? '사용 처리' : '사용',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   );
                 },
